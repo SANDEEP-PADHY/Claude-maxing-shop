@@ -10,9 +10,9 @@ export const AdminNav: React.FC = () => {
 
   const links = [
     { name: "Overview", href: "/admin", icon: LayoutDashboard },
+    { name: "Access Keys", href: "/admin/access-keys", icon: Key },
     { name: "Orders & Payments", href: "/admin/orders", icon: ShoppingCart },
     { name: "Customers", href: "/admin/customers", icon: Users },
-    { name: "Subscriptions", href: "/admin/subscriptions", icon: Key },
   ];
 
   return (

@@ -9,65 +9,104 @@ export async function GET() {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
+    const now = new Date();
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
     const [
-      todayOrders,
-      totalOrders,
-      successfulPayments,
-      pendingFulfilments,
-      activeSubscriptions,
-      totalCustomers,
+      paidOrdersRecords,
+      pendingDeliveries,
+      failedPayments,
+      allKeys,
+      activeAssignments,
+      expiredAssignmentsCount,
       recentOrders,
     ] = await Promise.all([
-      prisma.order.count({
-        where: { created_at: { gte: startOfToday } },
-      }),
-      prisma.order.count(),
-      prisma.order.count({
-        where: { status: "PAID" },
-      }),
-      prisma.subscription.count({
-        where: { fulfilment_status: "FULFILMENT_PENDING" },
-      }),
-      prisma.subscription.count({
-        where: { status: "ACTIVE" },
-      }),
-      prisma.user.count({
-        where: { role: "customer" },
-      }),
+      // Paid orders
       prisma.order.findMany({
-        take: 8,
+        where: { status: "PAID" },
+        select: { id: true, amount: true, created_at: true },
+      }),
+      // Pending deliveries
+      prisma.order.count({
+        where: {
+          status: "PAID",
+          delivery_status: "PENDING",
+        },
+      }),
+      // Failed payments
+      prisma.order.count({
+        where: {
+          OR: [
+            { status: "PAYMENT_FAILED" },
+            { payment_status: "FAILED" },
+          ],
+        },
+      }),
+      // All access keys
+      prisma.accessKey.findMany({
+        include: { plan: true },
+      }),
+      // Active access assignments
+      prisma.accessAssignment.findMany({
+        where: {
+          status: "ACTIVE",
+          expires_at: { gte: now },
+        },
+        include: { plan: true },
+      }),
+      // Expired access count
+      prisma.accessAssignment.count({
+        where: {
+          OR: [
+            { status: "EXPIRED" },
+            { expires_at: { lt: now } },
+          ],
+        },
+      }),
+      // Recent orders with customer and key details
+      prisma.order.findMany({
+        take: 10,
         orderBy: { created_at: "desc" },
         include: {
           plan: true,
-          user: { select: { id: true, name: true, email: true } },
-          subscriptions: true,
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          access_key: true,
+          payments: true,
         },
       }),
     ]);
 
-    // Calculate revenue
-    const paidOrders = await prisma.order.findMany({
-      where: { status: "PAID" },
-      select: { amount: true, created_at: true },
-    });
-
-    const totalRevenue = paidOrders.reduce((sum, o) => sum + o.amount, 0);
-    const todayRevenue = paidOrders
+    // Today's sales
+    const todaySales = paidOrdersRecords
       .filter((o) => o.created_at >= startOfToday)
       .reduce((sum, o) => sum + o.amount, 0);
 
+    const paidOrders = paidOrdersRecords.length;
+
+    // Active 5X allocations and 20X allocations
+    const active5xAllocations = activeAssignments.filter(
+      (a) => a.plan.multiplier === 5 || a.plan.slug.includes("5x")
+    ).length;
+
+    const active20xAllocations = activeAssignments.filter(
+      (a) => a.plan.multiplier === 20 || a.plan.slug.includes("20x")
+    ).length;
+
+    // Available key capacity across active/available keys
+    const availableKeyCapacity = allKeys
+      .filter((k) => k.status === "ACTIVE" || k.status === "AVAILABLE")
+      .reduce((sum, k) => sum + Math.max(0, k.max_customers - k.current_customers), 0);
+
     return NextResponse.json({
-      todayOrders,
-      todayRevenue,
-      totalOrders,
-      totalRevenue,
-      successfulPayments,
-      pendingFulfilments,
-      activeSubscriptions,
-      totalCustomers,
+      todaySales,
+      paidOrders,
+      pendingDeliveries,
+      active5xAllocations,
+      active20xAllocations,
+      availableKeyCapacity,
+      expiredAccess: expiredAssignmentsCount,
+      failedPayments,
       recentOrders,
     });
   } catch (error) {

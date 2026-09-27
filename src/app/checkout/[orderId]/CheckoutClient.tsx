@@ -11,10 +11,12 @@ import {
   Lock,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
   CreditCard,
   Building,
   Smartphone,
+  Mail,
+  MessageSquare,
+  HelpCircle,
 } from "lucide-react";
 
 interface CheckoutClientProps {
@@ -23,6 +25,8 @@ interface CheckoutClientProps {
     amount: number;
     currency: string;
     status: string;
+    delivery_method?: string;
+    delivery_recipient?: string | null;
     cashfree_order_id?: string | null;
     plan: {
       name: string;
@@ -43,14 +47,30 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
   const router = useRouter();
   const { toast } = useToast();
 
+  const [deliveryMethod, setDeliveryMethod] = useState<"EMAIL" | "WHATSAPP">(
+    (order.delivery_method as "EMAIL" | "WHATSAPP") || "EMAIL"
+  );
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState("");
 
+  const handleDeliverySelect = async (method: "EMAIL" | "WHATSAPP") => {
+    setDeliveryMethod(method);
+    try {
+      await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryMethod: method }),
+      });
+    } catch (e) {
+      console.error("Failed to sync delivery method:", e);
+    }
+  };
+
   const handleProceedToPayment = async () => {
     if (!agreedTerms) {
-      setError("Please accept the Terms & Conditions and Privacy Policy to continue.");
-      toast("Please accept the Terms & Conditions to proceed.", "error");
+      setError("Please accept the terms and refund policy before proceeding.");
+      toast("Please accept the terms and refund policy to proceed.", "error");
       return;
     }
 
@@ -58,13 +78,14 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
     setIsProcessing(true);
 
     try {
-      // Call server verification / Cashfree execution endpoint
+      // Call server verification / Cashfree execution endpoint with chosen deliveryMethod
       const res = await fetch("/api/payments/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId: order.id,
-          isSimulatedSuccess: true, // For sandbox / test environment execution
+          deliveryMethod,
+          isSimulatedSuccess: true, // For sandbox / test execution
         }),
       });
 
@@ -74,7 +95,7 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
         throw new Error(data.message || data.error || "Payment verification failed");
       }
 
-      toast("Payment verified successfully! Provisioning your subscription...", "success");
+      toast("Payment verified successfully! Access activated.", "success");
       router.push(`/dashboard?payment=success&orderId=${order.id}`);
       router.refresh();
     } catch (err: any) {
@@ -100,7 +121,7 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
         </div>
         <div className="text-left sm:text-right font-mono text-xs text-[#A3A3A3]">
           <div>Order ID: <span className="text-[#F5F5F5]">{order.id}</span></div>
-          <div className="text-[11px] text-[#6F6F6F]">Gateway: Cashfree Payments</div>
+          <div className="text-[11px] text-[#6F6F6F]">Payment: Cashfree</div>
         </div>
       </div>
 
@@ -113,21 +134,21 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
 
       {/* Asymmetric 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Plan & Customer Info (7 cols) */}
+        {/* Left Column: Plan, Delivery, Customer Info (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           {/* Selected Plan Details */}
           <div className="rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-mono uppercase text-[#6F6F6F] tracking-wider block mb-1">
-                  Selected Subscription Tier
+                  Selected Managed Access Tier
                 </span>
                 <h3 className="text-xl font-semibold text-[#F5F5F5]">
                   {order.plan.name}
                 </h3>
               </div>
               <span className="text-xs px-2.5 py-1 rounded-full bg-[#202020] border border-[#2D2D2D] text-[#D97757] font-mono font-medium">
-                {order.plan.multiplier}x usage
+                {order.plan.multiplier}X Access
               </span>
             </div>
 
@@ -137,25 +158,114 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
 
             <div className="pt-3 border-t border-[#2D2D2D] flex items-center justify-between text-xs">
               <span className="text-[#6F6F6F]">Duration</span>
-              <span className="text-[#F5F5F5] font-medium">1 Month (Monthly Access)</span>
+              <span className="text-[#F5F5F5] font-medium">30 Days Managed Access</span>
             </div>
+          </div>
+
+          {/* REQUIRED Delivery Method Selection */}
+          <div className="rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-mono uppercase text-[#D97757] tracking-wider font-semibold">
+                  Required Selection
+                </span>
+                <span className="text-[10px] font-mono text-[#6F6F6F]">Step 1 of 2</span>
+              </div>
+              <h3 className="text-base font-semibold text-[#F5F5F5]">
+                How would you like to receive your access?
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Option 1: Email */}
+              <button
+                type="button"
+                onClick={() => handleDeliverySelect("EMAIL")}
+                className={`p-4 rounded-[12px] border text-left transition-all flex flex-col justify-between ${
+                  deliveryMethod === "EMAIL"
+                    ? "border-[#D97757] bg-[#202020] text-[#F5F5F5] shadow-sm"
+                    : "border-[#2D2D2D] bg-[#121212] text-[#A3A3A3] hover:border-[#404040]"
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <span className="font-semibold text-sm flex items-center gap-2">
+                    <Mail size={16} className={deliveryMethod === "EMAIL" ? "text-[#D97757]" : "text-[#6F6F6F]"} />
+                    Email
+                  </span>
+                  {deliveryMethod === "EMAIL" && (
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#D97757]"></span>
+                  )}
+                </div>
+                <div className="text-[11px] text-[#A3A3A3] truncate font-mono">
+                  {order.user.email}
+                </div>
+                <div className="text-[10px] text-[#6F6F6F] mt-2 font-mono">
+                  Automated delivery to email
+                </div>
+              </button>
+
+              {/* Option 2: WhatsApp */}
+              <button
+                type="button"
+                onClick={() => handleDeliverySelect("WHATSAPP")}
+                className={`p-4 rounded-[12px] border text-left transition-all flex flex-col justify-between ${
+                  deliveryMethod === "WHATSAPP"
+                    ? "border-[#D97757] bg-[#202020] text-[#F5F5F5] shadow-sm"
+                    : "border-[#2D2D2D] bg-[#121212] text-[#A3A3A3] hover:border-[#404040]"
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-2">
+                  <span className="font-semibold text-sm flex items-center gap-2">
+                    <MessageSquare size={16} className={deliveryMethod === "WHATSAPP" ? "text-[#D97757]" : "text-[#6F6F6F]"} />
+                    WhatsApp
+                  </span>
+                  {deliveryMethod === "WHATSAPP" && (
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#D97757]"></span>
+                  )}
+                </div>
+                <div className="text-[11px] text-[#A3A3A3] truncate font-mono">
+                  {order.user.phone}
+                </div>
+                <div className="text-[10px] text-[#6F6F6F] mt-2 font-mono">
+                  Delivered on WhatsApp
+                </div>
+              </button>
+            </div>
+
+            {/* Recipient Details & Notices */}
+            {deliveryMethod === "EMAIL" ? (
+              <div className="p-3.5 rounded-[10px] bg-[#121212] border border-[#2D2D2D] text-xs text-[#A3A3A3] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span>Verified account email:</span>
+                <span className="font-mono text-[#F5F5F5] font-medium">{order.user.email}</span>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-[10px] bg-[#121212] border border-[#2D2D2D] text-xs text-[#A3A3A3] space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span>Account phone number:</span>
+                  <span className="font-mono text-[#F5F5F5] font-medium">{order.user.phone}</span>
+                </div>
+                <div className="text-[11px] text-[#D97757] font-medium pt-1">
+                  The access key will be delivered directly through WhatsApp to this number.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Customer Information */}
           <div className="rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 space-y-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-mono uppercase text-[#6F6F6F] tracking-wider">
-                Customer & Target Account
+                Account Details
               </span>
               <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
                 <CheckCircle2 size={12} />
-                Session Verified
+                Logged In
               </span>
             </div>
 
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-[#6F6F6F]">Full Name:</span>
+                <span className="text-[#6F6F6F]">Name:</span>
                 <span className="text-[#F5F5F5] font-medium">{order.user.name}</span>
               </div>
               <div className="flex justify-between">
@@ -173,18 +283,18 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
           <div className="rounded-[16px] bg-[#121212] border border-[#2D2D2D] p-5 space-y-3 text-xs text-[#A3A3A3]">
             <div className="flex items-center gap-2 text-[#F5F5F5] font-semibold text-xs">
               <ShieldCheck size={16} className="text-[#D97757]" />
-              <span>Cashfree Payment Gateway Integration</span>
+              <span>Cashfree Payment Gateway</span>
             </div>
             <p className="text-[11px] leading-relaxed text-[#888888]">
-              Card and banking details are processed directly on RBI-compliant Cashfree payment rails. No sensitive card numbers or CVVs are collected or stored on this server.
+              Card and UPI details are securely processed directly on Cashfree. No card numbers or banking secrets are collected or stored on our servers.
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-[#6F6F6F]">
               <span className="flex items-center gap-1">
-                <Smartphone size={12} /> UPI (GPay, PhonePe, Paytm)
+                <Smartphone size={12} /> UPI (GPay, PhonePe, Paytm, BHIM)
               </span>
               <span>•</span>
               <span className="flex items-center gap-1">
-                <CreditCard size={12} /> Debit & Credit Cards
+                <CreditCard size={12} /> Cards
               </span>
               <span>•</span>
               <span className="flex items-center gap-1">
@@ -194,7 +304,7 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
           </div>
         </div>
 
-        {/* Right Column: Order Summary & Payment Button (5 cols) */}
+        {/* Right Column: Order Summary, Policy & Payment Button (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           <div className="rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 space-y-5">
             <h3 className="text-base font-semibold text-[#F5F5F5] border-b border-[#2D2D2D] pb-3">
@@ -203,13 +313,19 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
 
             <div className="space-y-3 text-xs">
               <div className="flex justify-between items-center text-[#A3A3A3]">
-                <span>{order.plan.name} (1 Month)</span>
+                <span>{order.plan.name} (30 Days)</span>
                 <span className="font-mono text-[#F5F5F5]">
                   ₹{order.amount.toLocaleString("en-IN")}
                 </span>
               </div>
               <div className="flex justify-between items-center text-[#6F6F6F]">
-                <span>Account Provisioning</span>
+                <span>Delivery Method</span>
+                <span className="font-mono text-[#F5F5F5]">
+                  {deliveryMethod === "EMAIL" ? "Email Delivery" : "WhatsApp Delivery"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[#6F6F6F]">
+                <span>Access Provisioning</span>
                 <span className="font-mono text-emerald-400">Included</span>
               </div>
               <div className="flex justify-between items-center text-[#6F6F6F]">
@@ -228,8 +344,14 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
               </div>
             </div>
 
+            {/* Refund & Cancellation Notice Card */}
+            <div className="p-3.5 rounded-[10px] bg-[#121212] border border-[#2D2D2D] text-[11px] text-[#A3A3A3] leading-relaxed">
+              <div className="font-semibold text-[#F5F5F5] mb-1">Refund & Cancellation Policy</div>
+              {siteConfig.refundPolicySummary}
+            </div>
+
             {/* Compliance & Policy Acceptance Checkbox */}
-            <div className="space-y-3 pt-3 border-t border-[#2D2D2D]">
+            <div className="space-y-3 pt-2">
               <label className="flex items-start gap-2.5 cursor-pointer text-xs text-[#A3A3A3]">
                 <input
                   type="checkbox"
@@ -238,13 +360,17 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
                   className="mt-0.5 rounded-[4px] border-[#2D2D2D] bg-[#0E0E0E] text-[#D97757] focus:ring-[#D97757]"
                 />
                 <span>
-                  I agree to the{" "}
+                  I understand and accept the{" "}
                   <Link href="/terms" target="_blank" className="text-[#D97757] hover:underline">
-                    Terms & Conditions
-                  </Link>{" "}
-                  and{" "}
+                    Terms
+                  </Link>
+                  ,{" "}
                   <Link href="/privacy" target="_blank" className="text-[#D97757] hover:underline">
                     Privacy Policy
+                  </Link>
+                  , and{" "}
+                  <Link href="/refund-policy" target="_blank" className="text-[#D97757] hover:underline">
+                    Refund Policy
                   </Link>
                   .
                 </span>
@@ -257,8 +383,8 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
                 <Link href="/cancellation-policy" target="_blank" className="hover:text-[#A3A3A3] underline">
                   Cancellation Policy
                 </Link>
-                <Link href="/support" target="_blank" className="hover:text-[#A3A3A3] underline flex items-center gap-1">
-                  <HelpCircle size={11} /> Support Desk
+                <Link href="/contact" target="_blank" className="hover:text-[#A3A3A3] underline flex items-center gap-1">
+                  <HelpCircle size={11} /> Support
                 </Link>
               </div>
             </div>
@@ -272,11 +398,11 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
               onClick={handleProceedToPayment}
             >
               <Lock size={15} />
-              <span>Proceed to Secure Payment</span>
+              <span>Proceed to Cashfree Payment</span>
             </Button>
 
             <div className="text-center text-[11px] text-[#6F6F6F]">
-              Clicking proceed verifies and completes payment via Cashfree.
+              Server-side verification confirms payment before key allocation.
             </div>
           </div>
         </div>

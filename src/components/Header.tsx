@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
               {siteConfig.name}
             </span>
             <span className="text-[10px] text-[#6F6F6F] font-mono leading-none hidden sm:block">
-              Authorized Subscription Access
+              Claude-powered API access
             </span>
           </div>
         </Link>

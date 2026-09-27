@@ -1,12 +1,21 @@
 {
-  "name": "claude-storefront",
-  "version": "0.1.0",
+  "name": "claudemaxing-shop",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint .",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:migrate": "prisma migrate dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

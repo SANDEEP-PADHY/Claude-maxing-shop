@@ -9,12 +9,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import {
   DollarSign,
-  ShoppingCart,
   CheckCircle2,
   Clock,
   Key,
   Users,
-  ArrowUpRight,
+  AlertTriangle,
+  Layers,
+  ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
 
 export default async function AdminDashboardPage() {
@@ -24,104 +26,223 @@ export default async function AdminDashboardPage() {
     redirect("/login?redirect=/admin");
   }
 
+  const now = new Date();
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
   const [
-    todayOrdersCount,
-    totalOrdersCount,
-    paidOrders,
-    pendingFulfilmentsCount,
-    activeSubsCount,
-    totalCustomersCount,
+    paidOrdersRecords,
+    pendingDeliveriesCount,
+    failedPaymentsCount,
+    allKeys,
+    activeAssignments,
+    expiredAccessCount,
     recentOrders,
   ] = await Promise.all([
-    prisma.order.count({ where: { created_at: { gte: startOfToday } } }),
-    prisma.order.count(),
     prisma.order.findMany({
       where: { status: "PAID" },
       select: { amount: true, created_at: true },
     }),
-    prisma.subscription.count({
-      where: { fulfilment_status: "FULFILMENT_PENDING" },
+    prisma.order.count({
+      where: {
+        status: "PAID",
+        delivery_status: "PENDING",
+      },
     }),
-    prisma.subscription.count({ where: { status: "ACTIVE" } }),
-    prisma.user.count({ where: { role: "customer" } }),
+    prisma.order.count({
+      where: {
+        OR: [
+          { status: "PAYMENT_FAILED" },
+          { payment_status: "FAILED" },
+        ],
+      },
+    }),
+    prisma.accessKey.findMany({
+      include: { plan: true },
+    }),
+    prisma.accessAssignment.findMany({
+      where: {
+        status: "ACTIVE",
+        expires_at: { gte: now },
+      },
+      include: { plan: true },
+    }),
+    prisma.accessAssignment.count({
+      where: {
+        OR: [
+          { status: "EXPIRED" },
+          { expires_at: { lt: now } },
+        ],
+      },
+    }),
     prisma.order.findMany({
-      take: 6,
+      take: 8,
       orderBy: { created_at: "desc" },
       include: {
         plan: true,
-        user: { select: { name: true, email: true } },
+        user: { select: { name: true, email: true, phone: true } },
+        access_key: true,
       },
     }),
   ]);
 
-  const totalRevenue = paidOrders.reduce((sum, o) => sum + o.amount, 0);
-  const todayRevenue = paidOrders
+  const todaySales = paidOrdersRecords
     .filter((o) => o.created_at >= startOfToday)
     .reduce((sum, o) => sum + o.amount, 0);
+
+  const paidOrdersCount = paidOrdersRecords.length;
+
+  const active5xAllocations = activeAssignments.filter(
+    (a) => a.plan.multiplier === 5 || a.plan.slug.includes("5x")
+  ).length;
+
+  const active20xAllocations = activeAssignments.filter(
+    (a) => a.plan.multiplier === 20 || a.plan.slug.includes("20x")
+  ).length;
+
+  const availableKeyCapacity = allKeys
+    .filter((k) => k.status === "ACTIVE" || k.status === "AVAILABLE")
+    .reduce((sum, k) => sum + Math.max(0, k.max_customers - k.current_customers), 0);
 
   return (
     <AppShell user={user}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 md:py-14 space-y-8">
         <AdminNav />
 
-        {/* Top Operational Metrics Grid */}
+        {/* Access Key Management Quick Action Bar */}
+        <div className="p-5 rounded-[16px] bg-[#151515] border border-[#2D2D2D] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#202020] border border-[#2D2D2D] flex items-center justify-center text-[#D97757]">
+              <Key size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#F5F5F5]">
+                Access Key Pool & Capacity Management
+              </h2>
+              <p className="text-xs text-[#A3A3A3]">
+                Manage encrypted API keys, allocation thresholds (10 for 5X, 5 for 20X), and assignment tracking.
+              </p>
+            </div>
+          </div>
+          <Link href="/admin/access-keys">
+            <Button variant="primary" size="sm" className="gap-1.5 shrink-0 text-xs">
+              <span>Manage Access Keys</span>
+              <ArrowRight size={14} />
+            </Button>
+          </Link>
+        </div>
+
+        {/* 8 Required Operational Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Metric 1 */}
+          {/* Metric 1: Today's sales */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
-              <span>TOTAL REVENUE</span>
+              <span>TODAY&apos;S SALES</span>
               <DollarSign size={14} className="text-[#D97757]" />
             </div>
             <div className="text-2xl font-bold font-mono text-[#F5F5F5]">
-              ₹{totalRevenue.toLocaleString("en-IN")}
+              ₹{todaySales.toLocaleString("en-IN")}
             </div>
             <div className="text-[11px] text-[#A3A3A3]">
-              Today: ₹{todayRevenue.toLocaleString("en-IN")}
+              Paid volume generated today
             </div>
           </div>
 
-          {/* Metric 2 */}
+          {/* Metric 2: Paid orders */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
-              <span>TOTAL ORDERS</span>
-              <ShoppingCart size={14} className="text-[#D97757]" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-[#F5F5F5]">
-              {totalOrdersCount}
-            </div>
-            <div className="text-[11px] text-[#A3A3A3]">
-              Today&apos;s new orders: {todayOrdersCount}
-            </div>
-          </div>
-
-          {/* Metric 3 */}
-          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
-              <span>ACTIVE SUBSCRIPTIONS</span>
-              <Key size={14} className="text-emerald-400" />
+              <span>PAID ORDERS</span>
+              <CheckCircle2 size={14} className="text-emerald-400" />
             </div>
             <div className="text-2xl font-bold font-mono text-emerald-400">
-              {activeSubsCount}
+              {paidOrdersCount}
             </div>
             <div className="text-[11px] text-[#A3A3A3]">
-              Total Customers: {totalCustomersCount}
+              Verified completed payments
             </div>
           </div>
 
-          {/* Metric 4 */}
+          {/* Metric 3: Pending deliveries */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
-              <span>PENDING FULFILMENT</span>
+              <span>PENDING DELIVERIES</span>
               <Clock size={14} className="text-amber-400" />
             </div>
-            <div className="text-2xl font-bold font-mono text-[#F5F5F5]">
-              {pendingFulfilmentsCount}
+            <div className="text-2xl font-bold font-mono text-amber-400">
+              {pendingDeliveriesCount}
             </div>
             <div className="text-[11px] text-[#A3A3A3]">
-              Paid orders awaiting setup
+              WhatsApp or manual dispatches pending
+            </div>
+          </div>
+
+          {/* Metric 4: Available key capacity */}
+          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
+              <span>AVAILABLE KEY CAPACITY</span>
+              <Key size={14} className="text-[#D97757]" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-[#F5F5F5]">
+              {availableKeyCapacity}
+            </div>
+            <div className="text-[11px] text-[#A3A3A3]">
+              Remaining customer slots across keys
+            </div>
+          </div>
+
+          {/* Metric 5: Active 5X allocations */}
+          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
+              <span>ACTIVE 5X ALLOCATIONS</span>
+              <Layers size={14} className="text-sky-400" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-sky-400">
+              {active5xAllocations}
+            </div>
+            <div className="text-[11px] text-[#A3A3A3]">
+              Customers active on 5X Access
+            </div>
+          </div>
+
+          {/* Metric 6: Active 20X allocations */}
+          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
+              <span>ACTIVE 20X ALLOCATIONS</span>
+              <Layers size={14} className="text-indigo-400" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-indigo-400">
+              {active20xAllocations}
+            </div>
+            <div className="text-[11px] text-[#A3A3A3]">
+              Customers active on 20X Access
+            </div>
+          </div>
+
+          {/* Metric 7: Expired access */}
+          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
+              <span>EXPIRED ACCESS</span>
+              <Clock size={14} className="text-[#6F6F6F]" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-[#A3A3A3]">
+              {expiredAccessCount}
+            </div>
+            <div className="text-[11px] text-[#6F6F6F]">
+              Assignments past 30-day validity
+            </div>
+          </div>
+
+          {/* Metric 8: Failed payments */}
+          <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-[#6F6F6F] font-mono">
+              <span>FAILED PAYMENTS</span>
+              <ShieldAlert size={14} className="text-rose-400" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-rose-400">
+              {failedPaymentsCount}
+            </div>
+            <div className="text-[11px] text-[#A3A3A3]">
+              Declined or failed attempts
             </div>
           </div>
         </div>
@@ -130,7 +251,7 @@ export default async function AdminDashboardPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-[#F5F5F5]">
-              Recent Platform Orders
+              Recent Orders & Deliveries
             </h2>
             <Link
               href="/admin/orders"
@@ -148,8 +269,9 @@ export default async function AdminDashboardPage() {
                   <th className="py-3 px-4 font-medium">Customer</th>
                   <th className="py-3 px-4 font-medium">Plan</th>
                   <th className="py-3 px-4 font-medium">Amount</th>
-                  <th className="py-3 px-4 font-medium">Date</th>
-                  <th className="py-3 px-4 font-medium">Status</th>
+                  <th className="py-3 px-4 font-medium">Delivery</th>
+                  <th className="py-3 px-4 font-medium">Payment</th>
+                  <th className="py-3 px-4 font-medium">Fulfillment</th>
                   <th className="py-3 px-4 font-medium text-right">Action</th>
                 </tr>
               </thead>
@@ -165,16 +287,29 @@ export default async function AdminDashboardPage() {
                     </td>
                     <td className="py-3.5 px-4">{o.plan.name}</td>
                     <td className="py-3.5 px-4 font-mono">₹{o.amount}</td>
-                    <td className="py-3.5 px-4 text-[#A3A3A3] font-mono">
-                      {new Date(o.created_at).toLocaleDateString("en-IN")}
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded bg-[#202020] border border-[#2D2D2D] text-[11px] font-mono">
+                        {o.delivery_method}
+                      </span>
                     </td>
                     <td className="py-3.5 px-4">
                       <StatusBadge status={o.status} />
                     </td>
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded ${
+                          o.delivery_status === "DELIVERED"
+                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
+                            : "bg-amber-950/60 text-amber-400 border border-amber-800/40"
+                        }`}
+                      >
+                        {o.delivery_status}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-4 text-right">
                       <Link href={`/admin/orders?q=${o.id}`}>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                          Inspect
+                          Manage
                         </Button>
                       </Link>
                     </td>

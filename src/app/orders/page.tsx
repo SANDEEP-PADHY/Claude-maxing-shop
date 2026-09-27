@@ -50,20 +50,26 @@ export default async function OrdersPage() {
           />
         ) : (
           <OrderTable
-            orders={orders.map((o) => ({
-              id: o.id,
-              planName: o.plan.name,
-              amount: o.amount,
-              currency: o.currency,
-              paymentMethod: o.payments[0]?.method || "Cashfree PG",
-              cashfreeOrderId: o.cashfree_order_id,
-              paymentId: o.payments[0]?.cashfree_payment_id,
-              date: o.created_at,
-              status: o.status,
-              customerName: user.name,
-              customerEmail: user.email,
-              customerPhone: user.phone,
-            }))}
+            orders={orders.map((o) => {
+              const purchaseDate = o.created_at;
+              const expiryDate = new Date(o.created_at.getTime() + 30 * 24 * 60 * 60 * 1000);
+              return {
+                id: o.id,
+                planName: o.plan.name,
+                amount: o.amount,
+                currency: o.currency,
+                status: o.status,
+                deliveryMethod: o.delivery_method,
+                deliveryStatus: o.delivery_status,
+                purchaseDate,
+                expiryDate,
+                customerName: user.name,
+                customerEmail: user.email,
+                customerPhone: user.phone,
+                paymentMethod: o.payments[0]?.method || "Cashfree PG",
+                cashfreeOrderId: o.cashfree_order_id,
+              };
+            })}
           />
         )}
       </div>

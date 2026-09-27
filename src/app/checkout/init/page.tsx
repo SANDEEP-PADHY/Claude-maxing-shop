@@ -12,7 +12,9 @@ export default async function CheckoutInitPage({
   const { plan: planSlug } = await searchParams;
   const user = await getCurrentUser();
 
-  const targetPlanSlug = planSlug || "claude-max-5x";
+  let targetPlanSlug = planSlug || "5x-access";
+  if (targetPlanSlug === "claude-max-5x" || targetPlanSlug === "5x") targetPlanSlug = "5x-access";
+  if (targetPlanSlug === "claude-max-20x" || targetPlanSlug === "20x") targetPlanSlug = "20x-access";
 
   // If unauthenticated: preserve selected plan and redirect to login
   if (!user) {
@@ -20,9 +22,17 @@ export default async function CheckoutInitPage({
   }
 
   // Lookup plan
-  const plan = await prisma.plan.findUnique({
+  let plan = await prisma.plan.findUnique({
     where: { slug: targetPlanSlug },
   });
+
+  if (!plan) {
+    // Fallback to first active plan
+    plan = await prisma.plan.findFirst({
+      where: { active: true },
+      orderBy: { price: "asc" },
+    });
+  }
 
   if (!plan) {
     redirect("/plans");
@@ -41,6 +51,9 @@ export default async function CheckoutInitPage({
       currency: plan.currency,
       status: "PAYMENT_PENDING",
       payment_status: "PENDING",
+      delivery_method: "EMAIL",
+      delivery_status: "PENDING",
+      delivery_recipient: user.email,
     },
   });
 

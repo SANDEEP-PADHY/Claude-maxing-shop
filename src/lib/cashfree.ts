@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "./prisma";
+import { decryptAccessKey } from "./encryption";
+import { sendAccessEmail } from "./email";
 
 const CASHFREE_CLIENT_ID = process.env.CASHFREE_CLIENT_ID || "";
 const CASHFREE_CLIENT_SECRET = process.env.CASHFREE_CLIENT_SECRET || "";
@@ -164,7 +166,7 @@ export async function fetchCashfreeOrderStatus(orderId: string) {
 }
 
 /**
- * Idempotently marks an order as PAID and provisions the subscription
+ * Idempotently marks an order as PAID, allocates an active Access Key, and executes delivery
  */
 export async function processPaymentSuccess({
   orderId,
@@ -183,6 +185,11 @@ export async function processPaymentSuccess({
       plan: true,
       user: true,
       subscriptions: true,
+      assignments: {
+        include: {
+          access_key: true,
+        },
+      },
     },
   });
 
@@ -190,32 +197,97 @@ export async function processPaymentSuccess({
     throw new Error(`Order ${orderId} not found`);
   }
 
-  // Idempotency check: if order is already marked as PAID and has active subscription, return early
-  if (order.status === "PAID" && order.subscriptions.length > 0) {
+  // Idempotency check: if order is already marked as PAID and has active assignment or subscription, return early
+  if (order.status === "PAID" && (order.assignments.length > 0 || order.subscriptions.length > 0)) {
     return {
       success: true,
       alreadyProcessed: true,
       order,
-      subscription: order.subscriptions[0],
+      assignment: order.assignments[0] || null,
+      subscription: order.subscriptions[0] || null,
     };
   }
 
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-  const providerReference = `AUTH-CLAUDE-${order.plan.multiplier}X-${Date.now().toString().slice(-6)}`;
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days server-calculated
+  const providerReference = `ACCESS-${order.plan.multiplier}X-${Date.now().toString().slice(-6)}`;
 
-  // Run in a single transaction to maintain strict consistency
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Update Order
+    // 1. Find candidate active access keys for the purchased plan inside transaction
+    const candidateKeys = await tx.accessKey.findMany({
+      where: {
+        plan_id: order.plan_id,
+        status: { in: ["ACTIVE", "AVAILABLE"] },
+      },
+      orderBy: {
+        created_at: "asc",
+      },
+    });
+
+    let assignedKeyRecord: any = null;
+    let assignment: any = null;
+
+    // Atomically reserve a slot on the first key with available capacity
+    for (const key of candidateKeys) {
+      // Conditional atomic update ensuring current_customers < max_customers
+      const rowsUpdated = await tx.$executeRaw`
+        UPDATE access_keys 
+        SET current_customers = current_customers + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${key.id} 
+          AND current_customers < max_customers 
+          AND status IN ('ACTIVE', 'AVAILABLE')
+      `;
+
+      if (rowsUpdated > 0) {
+        // Slot secured atomically! Check if key reached full capacity
+        const refreshedKey = await tx.accessKey.findUnique({ where: { id: key.id } });
+        if (refreshedKey && refreshedKey.current_customers >= refreshedKey.max_customers) {
+          await tx.accessKey.update({
+            where: { id: key.id },
+            data: { status: "FULL" },
+          });
+          refreshedKey.status = "FULL";
+        }
+        assignedKeyRecord = refreshedKey;
+        break;
+      }
+    }
+
+    // 2. Create AccessAssignment if a key was secured
+    if (assignedKeyRecord) {
+      assignment = await tx.accessAssignment.create({
+        data: {
+          user_id: order.user_id,
+          order_id: orderId,
+          access_key_id: assignedKeyRecord.id,
+          plan_id: order.plan_id,
+          status: "ACTIVE",
+          assigned_at: now,
+          expires_at: expiresAt,
+          delivered_at: null, // manual fulfillment is pending
+        },
+      });
+    }
+
+    // 3. Determine recipient
+    const isEmail = order.delivery_method === "EMAIL";
+    const recipient =
+      order.delivery_recipient || (isEmail ? order.user.email : order.user.phone);
+
+    // 4. Update Order: payment_status = SUCCESS/PAID, delivery_status = PENDING (both Email & WhatsApp are manual!)
     const updatedOrder = await tx.order.update({
       where: { id: orderId },
       data: {
         status: "PAID",
         payment_status: "SUCCESS",
+        access_key_id: assignedKeyRecord ? assignedKeyRecord.id : null,
+        delivery_status: "PENDING", // Strictly PENDING until admin manually delivers
+        delivery_recipient: recipient,
+        delivered_at: null,
       },
     });
 
-    // 2. Create Payment record
+    // 5. Create Payment record
     const payment = await tx.payment.create({
       data: {
         order_id: orderId,
@@ -227,45 +299,52 @@ export async function processPaymentSuccess({
       },
     });
 
-    // 3. Create / Activate Subscription
+    // 6. Create Subscription record (managed, without exposing upstream details)
     const subscription = await tx.subscription.create({
       data: {
         user_id: order.user_id,
         order_id: orderId,
         plan_id: order.plan_id,
-        provider: "anthropic",
+        provider: "managed",
         provider_reference: providerReference,
         starts_at: now,
         expires_at: expiresAt,
         status: "ACTIVE",
-        fulfilment_status: "ACTIVE",
+        fulfilment_status: "PENDING_DELIVERY",
         activation_details: JSON.stringify({
-          tier: `${order.plan.multiplier}x usage tier`,
-          assignedEmail: order.user.email,
-          node: "us-east-1-authorized",
+          planName: order.plan.name,
+          deliveryMethod: order.delivery_method,
+          recipient,
+          keyAssigned: Boolean(assignedKeyRecord),
           activatedAt: now.toISOString(),
         }),
       },
     });
 
-    // 4. Audit Log
+    // 7. Audit Log
     await tx.auditLog.create({
       data: {
         user_id: order.user_id,
-        action: "PAYMENT_AND_FULFILMENT_COMPLETED",
+        action: assignedKeyRecord
+          ? "PAYMENT_AND_ACCESS_ALLOCATED"
+          : "PAYMENT_RECEIVED_KEY_CAPACITY_PENDING",
         entity_type: "ORDER",
         entity_id: orderId,
         metadata: JSON.stringify({
           amount: order.amount,
           plan: order.plan.name,
           paymentId: cashfreePaymentId,
-          subscriptionId: subscription.id,
+          deliveryMethod: order.delivery_method,
+          keyId: assignedKeyRecord ? assignedKeyRecord.id : null,
         }),
       },
     });
 
-    return { updatedOrder, payment, subscription };
+    return { updatedOrder, payment, subscription, assignment, assignedKeyRecord };
   });
+
+  // DO NOT send automated email or automated WhatsApp!
+  // Both Email and WhatsApp are manual fulfilment by admin.
 
   return { success: true, alreadyProcessed: false, ...result };
 }

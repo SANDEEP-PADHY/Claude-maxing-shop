@@ -33,7 +33,20 @@ export default async function DashboardPage({
 
   const { payment, orderId } = await searchParams;
 
-  // Fetch active subscriptions
+  // Fetch active assignments & subscriptions
+  const activeAssignment = await prisma.accessAssignment.findFirst({
+    where: {
+      user_id: user.id,
+      status: "ACTIVE",
+    },
+    include: {
+      plan: true,
+      order: true,
+      access_key: true,
+    },
+    orderBy: { assigned_at: "desc" },
+  });
+
   const subscriptions = await prisma.subscription.findMany({
     where: { user_id: user.id },
     include: {
@@ -49,12 +62,24 @@ export default async function DashboardPage({
     include: {
       plan: true,
       payments: true,
+      access_key: true,
     },
     orderBy: { created_at: "desc" },
     take: 10,
   });
 
   const activeSubscription = subscriptions.find((s) => s.status === "ACTIVE");
+
+  const effectivePlanName =
+    activeAssignment?.plan.name || activeSubscription?.plan.name || "No Active Plan";
+  const effectiveMultiplier =
+    activeAssignment?.plan.multiplier || activeSubscription?.plan.multiplier || 0;
+  const effectiveExpiresAt =
+    activeAssignment?.expires_at || activeSubscription?.expires_at || null;
+  const effectiveDeliveryMethod =
+    activeAssignment?.order?.delivery_method ||
+    activeSubscription?.order?.delivery_method ||
+    (orders.length > 0 ? orders[0].delivery_method : "EMAIL");
 
   // Determine greeting based on current hour
   const hour = new Date().getHours();
@@ -77,16 +102,16 @@ export default async function DashboardPage({
               </div>
               <div>
                 <span className="font-semibold block text-[#F5F5F5]">
-                  Payment Verified & Subscription Activated
+                  Payment Verified & Access Activated
                 </span>
                 <span className="text-[#A3A3A3] text-xs">
-                  Your order {orderId || ""} was processed successfully via Cashfree.
+                  Your order {orderId || ""} was verified successfully. Access has been allocated.
                 </span>
               </div>
             </div>
-            <Link href="/orders">
+            <Link href="/dashboard/access">
               <Button variant="secondary" size="sm" className="shrink-0 text-xs">
-                View Receipt
+                View Access Details
               </Button>
             </Link>
           </div>
@@ -97,7 +122,7 @@ export default async function DashboardPage({
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#151515] border border-[#2D2D2D] text-[11px] font-mono text-[#A3A3A3] mb-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>Customer Portal // Authorized Node</span>
+              <span>Customer Portal // Managed API Access</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#F5F5F5]">
               {greeting}, {user.name.split(" ")[0]}
@@ -108,16 +133,15 @@ export default async function DashboardPage({
           </div>
 
           <div className="flex items-center gap-3">
+            <Link href="/dashboard/access">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <span>Access Details</span>
+              </Button>
+            </Link>
             <Link href="/plans">
               <Button variant="primary" size="sm" className="gap-1.5">
                 <PlusCircle size={14} />
-                <span>New Subscription</span>
-              </Button>
-            </Link>
-            <Link href="/support">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <HelpCircle size={14} />
-                <span>Support</span>
+                <span>Get Access</span>
               </Button>
             </Link>
           </div>
@@ -128,37 +152,37 @@ export default async function DashboardPage({
           {/* Card 1: Current Plan */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="text-[11px] font-mono uppercase text-[#6F6F6F] tracking-wider">
-              Current Plan
+              Current Access
             </div>
             <div className="text-base sm:text-lg font-semibold text-[#F5F5F5] truncate">
-              {activeSubscription ? activeSubscription.plan.name : "No Active Plan"}
+              {activeAssignment || activeSubscription ? effectivePlanName : "No Active Access"}
             </div>
             <div className="text-xs text-[#A3A3A3]">
-              {activeSubscription ? `${activeSubscription.plan.multiplier}x usage tier` : "Inactive"}
+              {effectiveMultiplier > 0 ? `${effectiveMultiplier}X Capacity Allocation` : "Inactive"}
             </div>
           </div>
 
           {/* Card 2: Status */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="text-[11px] font-mono uppercase text-[#6F6F6F] tracking-wider">
-              Subscription Status
+              Access Status
             </div>
             <div className="pt-0.5">
-              <StatusBadge status={activeSubscription ? activeSubscription.status : "INACTIVE"} />
+              <StatusBadge status={activeAssignment || activeSubscription ? "ACTIVE" : "INACTIVE"} />
             </div>
             <div className="text-[11px] text-[#6F6F6F]">
-              {activeSubscription ? "Direct Account Provisioning" : "Choose a plan to activate"}
+              {activeAssignment || activeSubscription ? "Managed Claude-powered API" : "Select a plan to activate"}
             </div>
           </div>
 
           {/* Card 3: Renewal / Expiry */}
           <div className="p-5 rounded-[14px] bg-[#151515] border border-[#2D2D2D] space-y-1.5">
             <div className="text-[11px] font-mono uppercase text-[#6F6F6F] tracking-wider">
-              Renewal / Expiry
+              Valid Until
             </div>
             <div className="text-base sm:text-lg font-semibold text-[#F5F5F5] font-mono">
-              {activeSubscription
-                ? new Date(activeSubscription.expires_at).toLocaleDateString("en-IN", {
+              {effectiveExpiresAt
+                ? new Date(effectiveExpiresAt).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
@@ -166,7 +190,7 @@ export default async function DashboardPage({
                 : "—"}
             </div>
             <div className="text-xs text-[#A3A3A3]">
-              {activeSubscription ? "Monthly cycle" : "No active term"}
+              {effectiveExpiresAt ? "30-day access validity" : "No active term"}
             </div>
           </div>
 
@@ -192,39 +216,44 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {/* Main Section: My Subscriptions */}
+        {/* Main Section: Your Access */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[#F5F5F5]">
-              Current Subscription
+              Your Access
             </h2>
-            {activeSubscription && (
+            {(activeAssignment || activeSubscription) && (
               <span className="text-xs font-mono text-[#D97757]">
-                Ref: {activeSubscription.provider_reference || "Synchronized"}
+                Active Allocation
               </span>
             )}
           </div>
 
-          {activeSubscription ? (
+          {(activeAssignment || activeSubscription) ? (
             <SubscriptionCard
               subscription={{
-                id: activeSubscription.id,
-                planName: activeSubscription.plan.name,
-                multiplier: activeSubscription.plan.multiplier,
-                price: activeSubscription.plan.price,
-                status: activeSubscription.status,
-                startsAt: activeSubscription.starts_at,
-                expiresAt: activeSubscription.expires_at,
-                orderId: activeSubscription.order_id,
-                providerReference: activeSubscription.provider_reference,
+                id: activeAssignment?.id || activeSubscription!.id,
+                planName: activeAssignment?.plan.name || activeSubscription!.plan.name,
+                multiplier: activeAssignment?.plan.multiplier || activeSubscription!.plan.multiplier,
+                price: activeAssignment?.plan.price || activeSubscription!.plan.price,
+                status: activeAssignment?.status || activeSubscription!.status,
+                startsAt: activeAssignment?.assigned_at || activeSubscription!.starts_at,
+                expiresAt: activeAssignment?.expires_at || activeSubscription!.expires_at,
+                orderId: activeAssignment?.order_id || activeSubscription!.order_id,
+                deliveryMethod: effectiveDeliveryMethod,
+                deliveryStatus:
+                  activeAssignment?.order?.delivery_status ||
+                  activeSubscription?.order?.delivery_status ||
+                  (orders.length > 0 ? orders[0].delivery_status : "PENDING"),
+                providerReference: activeAssignment?.id || activeSubscription!.provider_reference,
                 customerEmail: user.email,
               }}
             />
           ) : (
             <EmptyState
-              title="You haven't purchased a subscription yet."
-              description="Select an authorized Claude Max plan to unlock expanded prompt quotas, higher thread capacity, and predictable monthly billing."
-              actionText="View plans"
+              title="You don't have active access yet."
+              description="Choose a Claude-powered managed API access plan (5X Access or 20X Access) to get started."
+              actionText="View Access Plans"
               actionHref="/plans"
             />
           )}
@@ -249,9 +278,11 @@ export default async function DashboardPage({
               currency: o.currency,
               paymentMethod: o.payments[0]?.method || "Cashfree PG",
               cashfreeOrderId: o.cashfree_order_id,
-              paymentId: o.payments[0]?.cashfree_payment_id,
-              date: o.created_at,
               status: o.status,
+              deliveryMethod: o.delivery_method,
+              deliveryStatus: o.delivery_status,
+              purchaseDate: o.created_at,
+              expiryDate: new Date(o.created_at.getTime() + 30 * 24 * 60 * 60 * 1000),
               customerName: user.name,
               customerEmail: user.email,
               customerPhone: user.phone,

@@ -6,21 +6,23 @@ import { StatusBadge } from "./ui/StatusBadge";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
 import { siteConfig } from "@/lib/config";
-import { FileText, ExternalLink, Printer, HelpCircle, CheckCircle2 } from "lucide-react";
+import { FileText, ExternalLink, Printer, HelpCircle, CheckCircle2, MessageSquare, Mail } from "lucide-react";
 
 export interface OrderRowData {
   id: string;
   planName: string;
   amount: number;
   currency: string;
-  paymentMethod?: string | null;
-  cashfreeOrderId?: string | null;
-  paymentId?: string | null;
-  date: string | Date;
-  status: string;
+  status: string; // Payment status: PAID, PAYMENT_PENDING, etc.
+  deliveryMethod: string; // Email | WhatsApp
+  deliveryStatus: string; // PENDING, DELIVERED, etc.
+  purchaseDate: string | Date;
+  expiryDate: string | Date;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  paymentMethod?: string | null;
+  cashfreeOrderId?: string | null;
 }
 
 interface OrderTableProps {
@@ -38,6 +40,14 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
     );
   }
 
+  const formatDate = (date: string | Date) => {
+    return new Date(date).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   return (
     <>
       <div className="w-full overflow-x-auto rounded-[14px] border border-[#2D2D2D] bg-[#151515]">
@@ -47,19 +57,18 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
               <th className="py-3.5 px-4 font-medium">Order ID</th>
               <th className="py-3.5 px-4 font-medium">Plan</th>
               <th className="py-3.5 px-4 font-medium">Amount</th>
-              <th className="py-3.5 px-4 font-medium">Payment</th>
-              <th className="py-3.5 px-4 font-medium">Date</th>
-              <th className="py-3.5 px-4 font-medium">Status</th>
+              <th className="py-3.5 px-4 font-medium">Payment status</th>
+              <th className="py-3.5 px-4 font-medium">Delivery method</th>
+              <th className="py-3.5 px-4 font-medium">Delivery status</th>
+              <th className="py-3.5 px-4 font-medium">Purchase date</th>
+              <th className="py-3.5 px-4 font-medium">Expiry date</th>
               <th className="py-3.5 px-4 font-medium text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#2D2D2D] text-[#F5F5F5]">
             {orders.map((order) => {
-              const orderDate = new Date(order.date).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              });
+              const purchaseFormatted = formatDate(order.purchaseDate);
+              const expiryFormatted = formatDate(order.expiryDate);
 
               return (
                 <tr
@@ -74,14 +83,35 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
                   <td className="py-3.5 px-4 font-mono font-semibold">
                     ₹{order.amount.toLocaleString("en-IN")}
                   </td>
-                  <td className="py-3.5 px-4 text-[#A3A3A3]">
-                    {order.paymentMethod || "Cashfree PG"}
-                  </td>
-                  <td className="py-3.5 px-4 text-[#A3A3A3] font-mono">
-                    {orderDate}
-                  </td>
                   <td className="py-3.5 px-4">
                     <StatusBadge status={order.status} />
+                  </td>
+                  <td className="py-3.5 px-4 font-mono">
+                    <div className="flex items-center gap-1.5">
+                      {order.deliveryMethod === "WHATSAPP" ? (
+                        <MessageSquare size={13} className="text-emerald-400" />
+                      ) : (
+                        <Mail size={13} className="text-sky-400" />
+                      )}
+                      <span>{order.deliveryMethod === "WHATSAPP" ? "WhatsApp" : "Email"}</span>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 font-mono">
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                        order.deliveryStatus === "DELIVERED"
+                          ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
+                          : "bg-amber-950/60 text-amber-400 border border-amber-800/40"
+                      }`}
+                    >
+                      {order.deliveryStatus}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-[#A3A3A3] font-mono">
+                    {purchaseFormatted}
+                  </td>
+                  <td className="py-3.5 px-4 text-[#A3A3A3] font-mono">
+                    {expiryFormatted}
                   </td>
                   <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                     <Button
@@ -119,120 +149,101 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
                 <h4 className="text-base font-bold text-[#F5F5F5]">
                   {siteConfig.name}
                 </h4>
-                <p className="text-[11px] text-[#6F6F6F] mt-0.5">
-                  {siteConfig.address}
+                <p className="text-[11px] text-[#6F6F6F]">
+                  Claude-powered API access
                 </p>
-                {siteConfig.gstin && (
-                  <p className="text-[11px] font-mono text-[#6F6F6F]">
-                    GSTIN: {siteConfig.gstin}
-                  </p>
-                )}
+                <p className="text-[11px] text-[#6F6F6F]">
+                  WhatsApp: {siteConfig.whatsapp} • {siteConfig.email}
+                </p>
               </div>
-              <div className="text-right">
-                <StatusBadge status={selectedOrder.status} />
-                <div className="text-[11px] font-mono text-[#6F6F6F] mt-2">
-                  Date: {new Date(selectedOrder.date).toLocaleDateString("en-IN")}
+
+              <div className="text-right font-mono">
+                <div className="text-[#F5F5F5] font-semibold">{selectedOrder.id}</div>
+                <div className="text-[11px] text-[#6F6F6F]">
+                  Date: {formatDate(selectedOrder.purchaseDate)}
+                </div>
+                <div className="mt-1">
+                  <StatusBadge status={selectedOrder.status} />
                 </div>
               </div>
             </div>
 
-            {/* Customer & Order Metadata Grid */}
-            <div className="grid grid-cols-2 gap-4 p-4 rounded-[12px] bg-[#1A1A1A] border border-[#2D2D2D]">
-              <div>
-                <span className="text-[10px] uppercase font-mono text-[#6F6F6F] block mb-1">
+            {/* Billed To / Delivery info */}
+            <div className="grid grid-cols-2 gap-4 py-2 border-b border-[#2D2D2D]">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono uppercase text-[#6F6F6F] block">
                   Billed To
                 </span>
-                <div className="text-sm font-semibold text-[#F5F5F5]">
-                  {selectedOrder.customerName}
-                </div>
-                <div className="text-xs text-[#A3A3A3]">{selectedOrder.customerEmail}</div>
-                <div className="text-xs text-[#A3A3A3] font-mono">
-                  {selectedOrder.customerPhone}
-                </div>
+                <div className="font-semibold text-[#F5F5F5]">{selectedOrder.customerName}</div>
+                <div className="font-mono text-[11px]">{selectedOrder.customerEmail}</div>
+                <div className="font-mono text-[11px]">{selectedOrder.customerPhone}</div>
               </div>
-              <div>
-                <span className="text-[10px] uppercase font-mono text-[#6F6F6F] block mb-1">
-                  Order Identifiers
+
+              <div className="space-y-1 text-right">
+                <span className="text-[10px] font-mono uppercase text-[#6F6F6F] block">
+                  Delivery & Gateway
                 </span>
-                <div className="font-mono text-xs text-[#F5F5F5]">
-                  ID: {selectedOrder.id}
+                <div className="font-mono text-[#F5F5F5]">Method: {selectedOrder.deliveryMethod}</div>
+                <div className="font-mono text-[11px] text-[#A3A3A3]">
+                  Status: {selectedOrder.deliveryStatus}
                 </div>
-                {selectedOrder.cashfreeOrderId && (
-                  <div className="font-mono text-[11px] text-[#A3A3A3]">
-                    CF: {selectedOrder.cashfreeOrderId}
-                  </div>
-                )}
-                <div className="text-[11px] text-[#A3A3A3] mt-1">
-                  Payment: {selectedOrder.paymentMethod || "Cashfree PG"}
+                <div className="font-mono text-[11px] text-[#A3A3A3]">
+                  Gateway: Cashfree Payments
                 </div>
               </div>
             </div>
 
-            {/* Line Items */}
-            <div className="border border-[#2D2D2D] rounded-[10px] overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#1A1A1A] border-b border-[#2D2D2D] text-[#A3A3A3] font-mono">
-                  <tr>
-                    <th className="p-3 font-medium">Description</th>
-                    <th className="p-3 font-medium text-right">Qty</th>
-                    <th className="p-3 font-medium text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#2D2D2D]">
-                  <tr>
-                    <td className="p-3 text-[#F5F5F5]">
-                      <div className="font-semibold">{selectedOrder.planName}</div>
-                      <div className="text-[11px] text-[#6F6F6F]">
-                        Monthly access subscription
-                      </div>
-                    </td>
-                    <td className="p-3 text-right font-mono">1</td>
-                    <td className="p-3 text-right font-mono font-medium text-[#F5F5F5]">
-                      ₹{selectedOrder.amount.toLocaleString("en-IN")}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* Line items */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-[#6F6F6F] font-mono uppercase text-[10px] border-b border-[#2D2D2D] pb-1.5">
+                <span>Description</span>
+                <span>Amount (INR)</span>
+              </div>
+              <div className="flex justify-between items-center text-[#F5F5F5]">
+                <div>
+                  <span className="font-medium block">{selectedOrder.planName} (Monthly Access)</span>
+                  <span className="text-[11px] text-[#6F6F6F]">
+                    Valid: {formatDate(selectedOrder.purchaseDate)} — {formatDate(selectedOrder.expiryDate)}
+                  </span>
+                </div>
+                <span className="font-mono font-semibold">
+                  ₹{selectedOrder.amount.toLocaleString("en-IN")}
+                </span>
+              </div>
             </div>
 
-            {/* Totals Breakdown */}
-            <div className="flex justify-between items-center pt-2 text-xs">
-              <span className="text-[#6F6F6F]">Total Paid (Inclusive of applicable taxes)</span>
-              <span className="text-base font-bold text-[#F5F5F5] font-mono">
-                ₹{selectedOrder.amount.toLocaleString("en-IN")}
-              </span>
+            {/* Totals */}
+            <div className="pt-3 border-t border-[#2D2D2D] space-y-1.5 font-mono">
+              <div className="flex justify-between text-[#A3A3A3]">
+                <span>Subtotal</span>
+                <span>₹{selectedOrder.amount.toLocaleString("en-IN")}</span>
+              </div>
+              <div className="flex justify-between text-[#6F6F6F]">
+                <span>Taxes & GST</span>
+                <span>Inclusive</span>
+              </div>
+              <div className="flex justify-between text-[#F5F5F5] font-bold text-sm pt-2 border-t border-[#2D2D2D]">
+                <span>Total Paid</span>
+                <span className="text-[#D97757]">
+                  ₹{selectedOrder.amount.toLocaleString("en-IN")}
+                </span>
+              </div>
             </div>
-
-            {/* Relationship / Disclaimer note */}
-            <p className="text-[11px] text-[#6F6F6F] italic leading-normal">
-              {siteConfig.disclaimer}
-            </p>
 
             {/* Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#2D2D2D]">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => window.print()}
-                  className="gap-1.5"
-                >
-                  <Printer size={13} />
-                  <span>Print Receipt</span>
-                </Button>
-                <Link href={`/orders/${selectedOrder.id}`}>
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <ExternalLink size={13} />
-                    <span>Open Full Page</span>
-                  </Button>
-                </Link>
+            <div className="flex justify-between items-center pt-4 border-t border-[#2D2D2D]">
+              <div className="text-[11px] text-[#6F6F6F]">
+                Support: {siteConfig.email}
               </div>
-              <Link href="/support">
-                <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-                  <HelpCircle size={13} />
-                  <span>Need Help with this Order?</span>
-                </Button>
-              </Link>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => window.print()}
+                className="gap-1.5"
+              >
+                <Printer size={13} />
+                <span>Print Receipt</span>
+              </Button>
             </div>
           </div>
         </Modal>

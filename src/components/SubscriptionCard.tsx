@@ -1,8 +1,21 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 import Link from "next/link";
 import { Button } from "./ui/Button";
 import { StatusBadge } from "./ui/StatusBadge";
-import { ShieldCheck, Calendar, Hash, Mail, ArrowUpRight, HelpCircle } from "lucide-react";
+import { useToast } from "./ui/Toast";
+import {
+  Calendar,
+  Send,
+  Key,
+  ShieldCheck,
+  Eye,
+  Copy,
+  AlertTriangle,
+  X,
+  ArrowRight,
+} from "lucide-react";
 
 export interface SubscriptionData {
   id: string;
@@ -13,8 +26,9 @@ export interface SubscriptionData {
   startsAt: string | Date;
   expiresAt: string | Date;
   orderId: string;
+  deliveryMethod?: string;
+  deliveryStatus?: string;
   providerReference?: string | null;
-  activationDetails?: string | null;
   customerEmail: string;
 }
 
@@ -25,120 +39,237 @@ interface SubscriptionCardProps {
 export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   subscription,
 }) => {
+  const { toast } = useToast();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const expiresDate = new Date(subscription.expiresAt);
-  const now = new Date();
-  const diffDays = Math.ceil(
-    (expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const formattedExpiry = expiresDate.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  const deliveryMethodLabel =
+    subscription.deliveryMethod === "WHATSAPP" ? "WhatsApp" : "Email";
+
+  const isDelivered = subscription.deliveryStatus === "DELIVERED";
+
+  const handleReveal = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/access/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to reveal key");
+      }
+
+      setRevealedKey(data.key);
+      setShowConfirmModal(false);
+      toast("Access key revealed securely.", "success");
+    } catch (err: any) {
+      toast(err.message || "Could not reveal key.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!revealedKey) return;
+    navigator.clipboard.writeText(revealedKey);
+    setCopied(true);
+    toast("Access key copied to clipboard.", "success");
+    setTimeout(() => setCopied(false), 2500);
+  };
 
   return (
     <div className="rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 sm:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#2D2D2D]">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-xl sm:text-2xl font-bold text-[#F5F5F5] tracking-tight">
-              {subscription.planName}
-            </h3>
-            <StatusBadge status={subscription.status} />
-          </div>
-          <div className="text-xs text-[#A3A3A3] font-mono">
-            {subscription.multiplier}x usage capacity allocation
-          </div>
-        </div>
-        <div className="text-left sm:text-right">
-          <div className="text-2xl font-bold text-[#F5F5F5]">
-            ₹{subscription.price.toLocaleString("en-IN")}
-          </div>
-          <div className="text-xs text-[#6F6F6F]">per month</div>
+      {/* Top Section Tag */}
+      <div className="flex items-center justify-between pb-3 border-b border-[#2D2D2D]">
+        <span className="text-[11px] font-mono uppercase text-[#D97757] font-semibold tracking-wider">
+          YOUR ACCESS
+        </span>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={subscription.status} />
         </div>
       </div>
 
-      {/* Modular Information Matrix */}
+      {/* Main Title & Price */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-2xl sm:text-3xl font-bold text-[#F5F5F5] tracking-tight">
+            {subscription.planName}
+          </h3>
+          <div className="text-xs text-[#A3A3A3] mt-1">
+            Claude-powered managed API access
+          </div>
+        </div>
+        <div className="text-left sm:text-right">
+          <div className="text-2xl sm:text-3xl font-bold text-[#F5F5F5] font-mono">
+            ₹{subscription.price.toLocaleString("en-IN")}
+          </div>
+          <div className="text-xs text-[#6F6F6F]">/ month</div>
+        </div>
+      </div>
+
+      {/* Modular Metadata Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {/* Card 1: Expiry */}
         <div className="p-4 rounded-[12px] bg-[#202020] border border-[#2D2D2D] space-y-1">
           <div className="flex items-center gap-1.5 text-xs text-[#6F6F6F] font-mono">
             <Calendar size={13} />
-            <span>EXPIRES / RENEWAL</span>
+            <span>Valid until</span>
           </div>
-          <div className="text-sm font-semibold text-[#F5F5F5]">
-            {expiresDate.toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+          <div className="text-sm font-semibold text-[#F5F5F5] font-mono">
+            {formattedExpiry}
           </div>
           <div className="text-[11px] text-[#A3A3A3]">
-            {diffDays > 0 ? `${diffDays} days remaining` : "Expired"}
+            30-day managed access term
           </div>
         </div>
 
-        {/* Card 2: Order Reference */}
+        {/* Card 2: Delivery */}
         <div className="p-4 rounded-[12px] bg-[#202020] border border-[#2D2D2D] space-y-1">
           <div className="flex items-center gap-1.5 text-xs text-[#6F6F6F] font-mono">
-            <Hash size={13} />
-            <span>ORDER REFERENCE</span>
+            <Send size={13} />
+            <span>Delivery</span>
           </div>
-          <div className="text-sm font-semibold text-[#F5F5F5] font-mono truncate">
-            {subscription.orderId}
+          <div className="text-sm font-semibold text-[#F5F5F5] flex items-center justify-between">
+            <span>{deliveryMethodLabel}</span>
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium ${
+                isDelivered
+                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
+                  : "bg-amber-950/60 text-amber-400 border border-amber-800/40"
+              }`}
+            >
+              {isDelivered ? "DELIVERED" : "PENDING"}
+            </span>
           </div>
           <div className="text-[11px] text-[#A3A3A3]">
-            Ref: {subscription.providerReference || "Synchronized"}
+            {isDelivered
+              ? `Dispatched on ${deliveryMethodLabel}`
+              : `Pending manual dispatch on ${deliveryMethodLabel}`}
           </div>
         </div>
 
-        {/* Card 3: Account Allocation Target */}
+        {/* Card 3: Key Quick View */}
         <div className="p-4 rounded-[12px] bg-[#202020] border border-[#2D2D2D] space-y-1">
           <div className="flex items-center gap-1.5 text-xs text-[#6F6F6F] font-mono">
-            <Mail size={13} />
-            <span>TARGET ACCOUNT</span>
+            <Key size={13} />
+            <span>ACCESS KEY</span>
           </div>
-          <div className="text-sm font-semibold text-[#F5F5F5] truncate">
-            {subscription.customerEmail}
+          <div className="text-sm font-mono text-[#F5F5F5] truncate">
+            {revealedKey ? revealedKey : "••••••••••••••••••••"}
           </div>
-          <div className="text-[11px] text-emerald-400 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>Authorized access granted</span>
+          <div className="text-[11px] text-[#D97757]">
+            {revealedKey ? "Key visible" : "Protected & encrypted"}
           </div>
         </div>
       </div>
 
-      {/* Status Treatment Note (honest, no fabricated chart) */}
+      {/* Security Note */}
       <div className="p-4 rounded-[12px] bg-[#101010] border border-[#2D2D2D] text-xs text-[#A3A3A3] flex items-start gap-3">
         <ShieldCheck size={18} className="text-[#D97757] shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <div className="font-medium text-[#F5F5F5]">
-            Account Synchronization Active
-          </div>
-          <p className="text-[11px] leading-relaxed text-[#888888]">
-            This subscription is authorized directly to your account. Your expanded {subscription.multiplier}x usage tier is active for the current billing cycle.
-          </p>
-        </div>
+        <p className="text-[11px] leading-relaxed text-[#888888]">
+          Keep this key private. Anyone with the key may be able to use the associated access.
+        </p>
       </div>
 
-      {/* Action Triggers */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-        <div className="flex items-center gap-3">
-          <Link href={`/orders`}>
-            <Button variant="secondary" size="sm" className="gap-1.5">
-              <span>View Invoices</span>
-              <ArrowUpRight size={14} />
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#2D2D2D]">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/dashboard/access">
+            <Button variant="primary" size="sm" className="gap-1.5 text-xs">
+              <span>Access details</span>
+              <ArrowRight size={14} />
             </Button>
           </Link>
-          <Link href="/support">
-            <Button variant="ghost" size="sm" className="gap-1.5">
-              <HelpCircle size={14} />
-              <span>Contact Support</span>
+
+          {!revealedKey ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirmModal(true)}
+              className="gap-1.5 text-xs"
+            >
+              <Eye size={14} />
+              <span>Show access key</span>
             </Button>
-          </Link>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCopy}
+              className="gap-1.5 text-xs"
+            >
+              <Copy size={14} />
+              <span>{copied ? "Copied!" : "Copy key"}</span>
+            </Button>
+          )}
         </div>
+
         <Link href="/plans">
-          <Button variant="outline" size="sm">
-            Change Plan
+          <Button variant="ghost" size="sm" className="text-xs text-[#A3A3A3]">
+            Upgrade / Extend
           </Button>
         </Link>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-[16px] bg-[#151515] border border-[#2D2D2D] p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-[#2D2D2D]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F5F5]">
+                <AlertTriangle size={16} className="text-[#D97757]" />
+                <span>Show access key?</span>
+              </div>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="text-[#6F6F6F] hover:text-[#F5F5F5] transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-[#A3A3A3] leading-relaxed">
+              <p className="text-[#F5F5F5] font-medium">
+                Make sure nobody else can see your screen.
+              </p>
+              <p className="text-[#888888]">
+                Keep this key private. Anyone with the key may be able to use the associated access.
+              </p>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowConfirmModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleReveal}
+                isLoading={isLoading}
+                className="gap-1.5"
+              >
+                <Eye size={14} />
+                <span>Show key</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

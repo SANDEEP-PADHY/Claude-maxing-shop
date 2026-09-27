@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orderId, isSimulatedSuccess } = await req.json();
+    const { orderId, isSimulatedSuccess, deliveryMethod } = await req.json();
 
     if (!orderId) {
       return NextResponse.json({ error: "orderId is required" }, { status: 400 });
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { subscriptions: true },
+      include: { user: true, subscriptions: true },
     });
 
     if (!order) {
@@ -92,6 +92,20 @@ export async function POST(req: Request) {
 
     if (order.user_id !== user.id && user.role !== "admin") {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Update delivery method if passed
+    if (deliveryMethod === "EMAIL" || deliveryMethod === "WHATSAPP") {
+      const recipient = deliveryMethod === "EMAIL" ? order.user.email : order.user.phone;
+      await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          delivery_method: deliveryMethod,
+          delivery_recipient: recipient,
+        },
+      });
+      order.delivery_method = deliveryMethod;
+      order.delivery_recipient = recipient;
     }
 
     // Fetch verified order status from Cashfree server-side

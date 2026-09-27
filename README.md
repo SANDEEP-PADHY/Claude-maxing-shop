@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# claudemaxing.shop
 
-## Getting Started
+A production-ready storefront for selling managed Claude-powered API access plans. Built with Next.js 16, React 19, Prisma, and Cashfree Payment Gateway.
 
-First, run the development server:
+## Features
+
+- **Two plans**: 5X Access (₹999/mo) and 20X Access (₹1,999/mo)
+- **Cashfree PG integration** with server-side payment verification
+- **Atomic access key allocation** – keys are auto-assigned immediately after verified payment
+- **Manual fulfilment** – admin manually delivers keys via Email or WhatsApp
+- **Capacity management** – each access key supports configurable concurrent customers
+- **Encrypted key storage** – AES-256-GCM encryption at rest, masked display, secure reveal
+- **Admin console** – dashboard, orders, access keys, customers, delivery management
+- **Customer dashboard** – order history, access key reveal, delivery status
+- **Legal compliance** – refund, cancellation, privacy, and terms pages
+
+## Tech Stack
+
+| Layer       | Technology                    |
+| ----------- | ----------------------------- |
+| Framework   | Next.js 16 (App Router)       |
+| UI          | React 19, Tailwind CSS 4      |
+| Database    | Prisma ORM (SQLite dev / PostgreSQL prod) |
+| Auth        | JWT sessions via `jose` + `bcryptjs` |
+| Payments    | Cashfree Payment Gateway      |
+| Encryption  | Node.js `crypto` (AES-256-GCM)|
+
+## Quick Start
 
 ```bash
+# 1. Clone and install
+git clone https://github.com/<your-org>/claudemaxing.shop.git
+cd claudemaxing.shop
+npm install
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env – set AUTH_SECRET, Cashfree credentials, admin seed password
+
+# 3. Initialize database
+npx prisma db push
+npm run db:seed
+
+# 4. Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+├── prisma/
+│   ├── schema.prisma          # Database schema (SQLite)
+│   ├── schema.postgresql.prisma  # Production schema (PostgreSQL)
+│   └── seed.mjs               # Database seeder
+├── src/
+│   ├── app/                   # Next.js App Router pages & API routes
+│   │   ├── admin/             # Admin console pages
+│   │   ├── api/               # REST API endpoints
+│   │   ├── checkout/          # Checkout flow
+│   │   ├── dashboard/         # Customer dashboard
+│   │   └── ...                # Public pages (plans, legal, etc.)
+│   ├── components/            # Reusable UI components
+│   │   └── ui/                # Primitive components (Button, Card, etc.)
+│   └── lib/                   # Core logic
+│       ├── auth.ts            # JWT session management
+│       ├── cashfree.ts        # Payment gateway + atomic allocation
+│       ├── config.ts          # Site configuration
+│       ├── encryption.ts      # AES-256-GCM key encryption
+│       ├── email.ts           # Email utilities (manual only)
+│       └── prisma.ts          # Prisma client singleton
+├── scripts/
+│   └── verify_all_tests.mjs   # Automated test suite
+├── docs/                      # Deployment & operations docs
+└── .env.example               # Environment template
+```
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command            | Description                              |
+| ------------------ | ---------------------------------------- |
+| `npm run dev`      | Start development server                 |
+| `npm run build`    | Production build                         |
+| `npm run start`    | Start production server                  |
+| `npm run lint`     | Run ESLint                               |
+| `npm run typecheck`| TypeScript type checking                 |
+| `npm run db:push`  | Push Prisma schema to database           |
+| `npm run db:seed`  | Seed plans, access keys, and admin user  |
+| `npm run db:studio`| Open Prisma Studio GUI                   |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Documentation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) – Production deployment guide
+- [OPERATIONS.md](docs/OPERATIONS.md) – Day-to-day operations manual
+- [SECURITY.md](docs/SECURITY.md) – Security architecture & practices
+- [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) – Pre-release verification
 
-## Deploy on Vercel
+## Support
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Email**: support@claudemaxing.shop
+- **WhatsApp**: +91 96646 50235
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+Private. All rights reserved.

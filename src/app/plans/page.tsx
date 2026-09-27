@@ -12,13 +12,13 @@ export default async function PlansPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 md:py-24">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#151515] border border-[#2D2D2D] text-xs font-mono text-[#A3A3A3] mb-4">
-            <span>Official Usage Multipliers</span>
+            <span>Claude-powered API access</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-[#F5F5F5] mb-4">
             Choose your plan
           </h1>
           <p className="text-sm sm:text-base text-[#A3A3A3] leading-relaxed">
-            Transparent pricing in INR. Predictable monthly access with dedicated throughput.
+            Transparent pricing in INR. Managed Claude-powered API access with dedicated capacity allocations.
           </p>
         </div>
 
@@ -43,8 +43,8 @@ export default async function PlansPage() {
               <thead>
                 <tr className="border-b border-[#2D2D2D] text-[#A3A3A3] font-mono">
                   <th className="py-3 px-4 font-medium">Feature</th>
-                  <th className="py-3 px-4 font-medium">Claude Max 5x</th>
-                  <th className="py-3 px-4 font-medium">Claude Max 20x</th>
+                  <th className="py-3 px-4 font-medium">5X Access</th>
+                  <th className="py-3 px-4 font-medium">20X Access</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2D2D2D] text-[#F5F5F5]">
@@ -54,9 +54,9 @@ export default async function PlansPage() {
                   <td className="py-3.5 px-4 font-mono">₹1,999 / month</td>
                 </tr>
                 <tr>
-                  <td className="py-3.5 px-4 font-medium">Usage Multiplier</td>
-                  <td className="py-3.5 px-4 font-mono text-[#D97757]">5x standard tier</td>
-                  <td className="py-3.5 px-4 font-mono text-[#D97757]">20x heavy tier</td>
+                  <td className="py-3.5 px-4 font-medium">Usage Allocation</td>
+                  <td className="py-3.5 px-4 font-mono text-[#D97757]">5X Capacity</td>
+                  <td className="py-3.5 px-4 font-mono text-[#D97757]">20X Capacity</td>
                 </tr>
                 <tr>
                   <td className="py-3.5 px-4 font-medium">Billing Period</td>
