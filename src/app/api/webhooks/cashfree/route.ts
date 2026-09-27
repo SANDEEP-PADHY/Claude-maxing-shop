@@ -1,0 +1,65 @@
+import { NextResponse } from "next/server";
+import { verifyCashfreeSignature, processPaymentSuccess } from "@/lib/cashfree";
+import { prisma } from "@/lib/prisma";
+
+export async function POST(req: Request) {
+  try {
+    const rawBody = await req.text();
+    const timestamp = req.headers.get("x-webhook-timestamp") || "";
+    const signature = req.headers.get("x-webhook-signature") || "";
+
+    // Verify webhook signature authenticity
+    const isValid = verifyCashfreeSignature(rawBody, timestamp, signature);
+    if (!isValid) {
+      console.warn("Cashfree Webhook signature verification failed!");
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+
+    const event = JSON.parse(rawBody);
+    console.log("Cashfree Webhook received:", event.type || event.event);
+
+    const eventType = event.type || event.event;
+    const orderData = event.data?.order || event.order;
+    const paymentData = event.data?.payment || event.payment;
+
+    const orderId = orderData?.order_id || event.data?.order_id;
+    const paymentId = paymentData?.cf_payment_id || event.data?.cf_payment_id || `cf_wh_${Date.now()}`;
+    const paymentMethod = paymentData?.payment_group || paymentData?.payment_method || "Cashfree Webhook";
+
+    if (!orderId) {
+      return NextResponse.json({ error: "Missing order_id in webhook" }, { status: 400 });
+    }
+
+    if (eventType === "PAYMENT_SUCCESS_WEBHOOK" || eventType === "ORDER_PAID") {
+      // Idempotently process payment & provision subscription
+      await processPaymentSuccess({
+        orderId,
+        cashfreePaymentId: String(paymentId),
+        paymentMethod,
+        rawDetails: event,
+      });
+
+      return NextResponse.json({ status: "processed", orderId });
+    }
+
+    if (eventType === "PAYMENT_FAILED_WEBHOOK" || eventType === "PAYMENT_DECLINED") {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: "PAYMENT_FAILED",
+          payment_status: "FAILED",
+        },
+      });
+
+      return NextResponse.json({ status: "marked_failed", orderId });
+    }
+
+    return NextResponse.json({ status: "ignored", eventType });
+  } catch (error: any) {
+    console.error("Cashfree webhook processing error:", error);
+    return NextResponse.json(
+      { error: error.message || "Webhook processing failed" },
+      { status: 500 }
+    );
+  }
+}

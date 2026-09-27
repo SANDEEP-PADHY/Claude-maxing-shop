@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String          @id @default(cuid())
+  name              String
+  email             String          @unique
+  phone             String          @unique
+  password_hash     String
+  role              String          @default("customer") // customer | admin
+  email_verified_at DateTime?
+  phone_verified_at DateTime?
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+
+  orders            Order[]
+  subscriptions     Subscription[]
+  support_tickets   SupportTicket[]
+  audit_logs        AuditLog[]
+
+  @@map("users")
+}
+
+model Plan {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  provider       String         @default("anthropic")
+  multiplier     Int
+  price          Int
+  currency       String         @default("INR")
+  billing_period String         @default("monthly")
+  description    String
+  features       String         // JSON string of features
+  active         Boolean        @default(true)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  orders         Order[]
+  subscriptions  Subscription[]
+
+  @@map("plans")
+}
+
+model Order {
+  id                String         @id
+  user_id           String
+  plan_id           String
+  cashfree_order_id String?        @unique
+  amount            Int
+  currency          String         @default("INR")
+  status            String         @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, PAYMENT_FAILED, CANCELLED, REFUNDED
+  payment_status    String         @default("PENDING") // PENDING, SUCCESS, FAILED, USER_DROPPED
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+
+  user              User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan              Plan           @relation(fields: [plan_id], references: [id])
+  payments          Payment[]
+  subscriptions     Subscription[]
+  support_tickets   SupportTicket[]
+
+  @@map("orders")
+}
+
+model Payment {
+  id                  String   @id @default(cuid())
+  order_id            String
+  cashfree_payment_id String?  @unique
+  status              String   // SUCCESS, FAILED, PENDING
+  amount              Int
+  method              String?  // upi, card, netbanking, wallet
+  raw_reference       String?  // JSON string
+  created_at          DateTime @default(now())
+
+  order               Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  user_id            String
+  order_id           String
+  plan_id            String
+  provider           String    @default("anthropic")
+  provider_reference String?
+  starts_at          DateTime
+  expires_at         DateTime
+  status             String    @default("PENDING") // PENDING, ACTIVE, EXPIRED, CANCELLED
+  fulfilment_status  String    @default("FULFILMENT_PENDING") // FULFILMENT_PENDING, ACTIVE, FAILED, CANCELLED
+  activation_details String?   // JSON string
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  order              Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  plan               Plan      @relation(fields: [plan_id], references: [id])
+
+  @@map("subscriptions")
+}
+
+model SupportTicket {
+  id         String   @id @default(cuid())
+  user_id    String?
+  order_id   String?
+  name       String?
+  email      String
+  category   String   // Payment issue, Activation issue, Subscription issue, Refund request, Account issue, Other
+  subject    String
+  message    String
+  status     String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  order      Order?   @relation(fields: [order_id], references: [id], onDelete: SetNull)
+
+  @@map("support_tickets")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  user_id     String?
+  action      String
+  entity_type String
+  entity_id   String?
+  metadata    String?  // JSON string
+  created_at  DateTime @default(now())
+
+  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
