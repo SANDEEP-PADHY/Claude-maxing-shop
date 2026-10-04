@@ -3,11 +3,40 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decryptAccessKey } from "@/lib/encryption";
 
+// Basic in-memory rate limiting map: identifier -> { count, resetTime }
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+function checkRateLimit(key: string, limit = 10, windowMs = 60000): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
+    return true;
+  }
+
+  if (record.count >= limit) {
+    return false;
+  }
+
+  record.count += 1;
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate limiting per user
+    const isAllowed = checkRateLimit(`reveal_${user.id}`);
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "Too many key reveal attempts. Please wait 1 minute before trying again." },
+        { status: 429 }
+      );
     }
 
     // Optional assignmentId can be passed, or default to most recent active assignment
@@ -71,6 +100,20 @@ export async function POST(req: Request) {
         );
       }
 
+      // Audit log for key reveal from order fallback
+      await prisma.auditLog.create({
+        data: {
+          user_id: user.id,
+          action: "ACCESS_KEY_REVEALED",
+          entity_type: "ORDER",
+          entity_id: order.id,
+          metadata: JSON.stringify({
+            method: "order_fallback",
+            keyId: order.access_key.id,
+          }),
+        },
+      });
+
       const decrypted = decryptAccessKey(order.access_key.key_value_encrypted);
 
       return NextResponse.json({
@@ -86,6 +129,21 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+
+    // Audit log for key reveal
+    await prisma.auditLog.create({
+      data: {
+        user_id: user.id,
+        action: "ACCESS_KEY_REVEALED",
+        entity_type: "ASSIGNMENT",
+        entity_id: assignment.id,
+        metadata: JSON.stringify({
+          method: "assignment",
+          keyId: assignment.access_key.id,
+          assignmentId: assignment.id,
+        }),
+      },
+    });
 
     const decrypted = decryptAccessKey(assignment.access_key.key_value_encrypted);
 

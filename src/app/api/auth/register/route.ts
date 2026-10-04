@@ -2,10 +2,41 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, validateIndianPhone, formatIndianPhone, createSession } from "@/lib/auth";
 
+// Basic in-memory rate limiting map: identifier -> { count, resetTime }
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+function checkRateLimit(key: string, limit = 5, windowMs = 60000): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
+    return true;
+  }
+
+  if (record.count >= limit) {
+    return false;
+  }
+
+  record.count += 1;
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { name, email, phone, password, confirmPassword, agreeTerms } = body;
+
+    // Rate limiting by IP (inferred from request) — server-side fallback
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+    const isAllowed = checkRateLimit(`register_${ip}`, 5, 60000);
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please wait 1 minute before trying again." },
+        { status: 429 }
+      );
+    }
 
     // Validation
     if (!name || typeof name !== "string" || name.trim().length < 2) {
@@ -32,6 +63,13 @@ export async function POST(req: Request) {
     if (!password || password.length < 8) {
       return NextResponse.json(
         { error: "Password must be at least 8 characters long." },
+        { status: 400 }
+      );
+    }
+
+    if (password.length > 128) {
+      return NextResponse.json(
+        { error: "Password must not exceed 128 characters." },
         { status: 400 }
       );
     }
@@ -76,7 +114,7 @@ export async function POST(req: Request) {
     // Securely hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
+    // Create user (email and phone are unverified until user confirms)
     const newUser = await prisma.user.create({
       data: {
         name: name.trim(),
@@ -84,8 +122,6 @@ export async function POST(req: Request) {
         phone: formattedPhone,
         password_hash: passwordHash,
         role: "customer",
-        email_verified_at: new Date(),
-        phone_verified_at: new Date(),
       },
     });
 

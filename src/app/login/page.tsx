@@ -67,7 +67,7 @@ function LoginForm() {
           Welcome back
         </h2>
         <p className="text-xs text-[#A3A3A3] mt-1.5">
-          Sign in to manage your Claude subscription and billing.
+          Sign in to manage your access.
         </p>
       </div>
 

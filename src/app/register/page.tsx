@@ -89,7 +89,7 @@ function RegisterForm() {
           Create an account
         </h2>
         <p className="text-xs text-[#A3A3A3] mt-1.5">
-          Unlock authorized Claude subscription plans with secure fulfillment.
+          Create your account for managed API access.
         </p>
       </div>
 

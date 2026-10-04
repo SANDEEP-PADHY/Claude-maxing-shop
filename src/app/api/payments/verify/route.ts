@@ -24,6 +24,12 @@ export async function GET(req: Request) {
     // Verify order status directly from Cashfree server-side
     const cfStatus = await fetchCashfreeOrderStatus(orderId);
 
+    if (!cfStatus) {
+      return NextResponse.redirect(
+        new URL(`/dashboard?error=verification_error`, req.url)
+      );
+    }
+
     const isPaid =
       cfStatus?.order_status === "PAID" ||
       cfStatus?.order_status === "SUCCESS" ||
@@ -75,7 +81,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orderId, isSimulatedSuccess, deliveryMethod } = await req.json();
+    const { orderId, deliveryMethod } = await req.json();
 
     if (!orderId) {
       return NextResponse.json({ error: "orderId is required" }, { status: 400 });
@@ -111,19 +117,25 @@ export async function POST(req: Request) {
     // Fetch verified order status from Cashfree server-side
     const cfStatus = await fetchCashfreeOrderStatus(orderId);
 
-    // If real cashfree verified or explicitly simulating in sandbox
+    if (!cfStatus) {
+      return NextResponse.json(
+        { error: "Unable to verify payment status with gateway." },
+        { status: 502 }
+      );
+    }
+
     const isPaid =
-      cfStatus?.order_status === "PAID" ||
-      cfStatus?.order_status === "SUCCESS" ||
-      (isSimulatedSuccess && cfStatus?.isSimulated);
+      cfStatus.order_status === "PAID" ||
+      cfStatus.order_status === "SUCCESS" ||
+      order.status === "PAID";
 
     if (isPaid) {
       const paymentId =
-        cfStatus?.cf_payment_id || `cf_pay_sim_${Date.now()}`;
+        cfStatus.cf_payment_id || `cf_pay_${Date.now()}`;
       const result = await processPaymentSuccess({
         orderId,
         cashfreePaymentId: String(paymentId),
-        paymentMethod: cfStatus?.payment_method || "Cashfree PG (Verified)",
+        paymentMethod: cfStatus.payment_method || "Cashfree PG (Verified)",
         rawDetails: cfStatus,
       });
 

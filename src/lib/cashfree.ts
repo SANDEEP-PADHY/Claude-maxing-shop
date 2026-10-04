@@ -120,7 +120,7 @@ export function verifyCashfreeSignature(
   timestamp: string,
   signature: string
 ): boolean {
-  if (!CASHFREE_CLIENT_SECRET) return true; // allow in simulated mode
+  if (!CASHFREE_CLIENT_SECRET) return false;
   try {
     const dataToSign = `${timestamp}${rawBody}`;
     const generatedSignature = crypto
@@ -140,7 +140,17 @@ export function verifyCashfreeSignature(
  */
 export async function fetchCashfreeOrderStatus(orderId: string) {
   const isConfigured = Boolean(CASHFREE_CLIENT_ID && CASHFREE_CLIENT_SECRET);
+
   if (!isConfigured) {
+    if (CASHFREE_ENV === "production") {
+      throw new Error(
+        "Production mode requires Cashfree API credentials. Payment verification is unavailable."
+      );
+    }
+    // Sandbox mode: return simulated PAID status for testing
+    console.warn(
+      `[Sandbox] No Cashfree credentials configured — returning simulated PAID status for order ${orderId}`
+    );
     return { order_status: "PAID", order_id: orderId, isSimulated: true };
   }
 

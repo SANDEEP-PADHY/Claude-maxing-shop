@@ -2,11 +2,39 @@ import { NextResponse } from "next/server";
 import { verifyCashfreeSignature, processPaymentSuccess } from "@/lib/cashfree";
 import { prisma } from "@/lib/prisma";
 
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+function isTimestampWithinWindow(timestamp: string, windowMs: number = FIVE_MINUTES_MS): boolean {
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts)) return false;
+  return Math.abs(Date.now() - ts) <= windowMs;
+}
+
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
     const timestamp = req.headers.get("x-webhook-timestamp") || "";
     const signature = req.headers.get("x-webhook-signature") || "";
+
+    // Reject if production mode without credentials
+    if (!process.env.CASHFREE_CLIENT_SECRET) {
+      if (process.env.CASHFREE_ENV === "production") {
+        console.error("Cashfree webhook rejected: production mode without client secret configured.");
+        return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+      }
+    }
+
+    // Timestamp validation to prevent replay attacks
+    if (!timestamp || !isTimestampWithinWindow(timestamp)) {
+      console.warn("Cashfree Webhook rejected: missing or stale timestamp.");
+      return NextResponse.json({ error: "Invalid or stale timestamp" }, { status: 401 });
+    }
+
+    // Validate signature format (should be base64-encoded)
+    if (!signature || !/^[A-Za-z0-9+/=]+$/.test(signature)) {
+      console.warn("Cashfree Webhook rejected: invalid signature format.");
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
 
     // Verify webhook signature authenticity
     const isValid = verifyCashfreeSignature(rawBody, timestamp, signature);

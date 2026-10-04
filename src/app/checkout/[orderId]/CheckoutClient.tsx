@@ -47,6 +47,9 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
   const router = useRouter();
   const { toast } = useToast();
 
+  const mode: "sandbox" | "production" =
+    process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox";
+
   const [deliveryMethod, setDeliveryMethod] = useState<"EMAIL" | "WHATSAPP">(
     (order.delivery_method as "EMAIL" | "WHATSAPP") || "EMAIL"
   );
@@ -78,6 +81,18 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
     setIsProcessing(true);
 
     try {
+      if (mode === "production") {
+        setError(
+          "Payments are processed through Cashfree in production. Use the Cashfree Dashboard or customer portal to complete payment for this order."
+        );
+        toast(
+          "Production mode: complete payment via Cashfree Dashboard or customer portal.",
+          "error"
+        );
+        setIsProcessing(false);
+        return;
+      }
+
       // Call server verification / Cashfree execution endpoint with chosen deliveryMethod
       const res = await fetch("/api/payments/verify", {
         method: "POST",
@@ -85,7 +100,6 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
         body: JSON.stringify({
           orderId: order.id,
           deliveryMethod,
-          isSimulatedSuccess: true, // For sandbox / test execution
         }),
       });
 
@@ -398,7 +412,7 @@ export const CheckoutClient: React.FC<CheckoutClientProps> = ({ order }) => {
               onClick={handleProceedToPayment}
             >
               <Lock size={15} />
-              <span>Proceed to Cashfree Payment</span>
+              <span>Proceed to Payment</span>
             </Button>
 
             <div className="text-center text-[11px] text-[#6F6F6F]">

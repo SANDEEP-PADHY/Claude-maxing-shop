@@ -2,24 +2,34 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, createSession, formatIndianPhone } from "@/lib/auth";
 
-// Basic in-memory rate limiting map: identifier -> { count, resetTime }
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+// Basic in-memory rate limiting map: identifier -> { count, resetTime, lastAttempt }
+const rateLimitMap = new Map<string, { count: number; resetTime: number; lastAttempt: number }>();
 
-function checkRateLimit(key: string, limit = 5, windowMs = 60000): boolean {
+function checkRateLimit(key: string, limit = 5, windowMs = 60000): { allowed: boolean; retryAfterMs?: number } {
   const now = Date.now();
   const record = rateLimitMap.get(key);
 
   if (!record || now > record.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
-    return true;
+    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs, lastAttempt: now });
+    return { allowed: true };
   }
 
+  // Timing safety: ensure minimum response time for invalid attempts
+  // to prevent timing-based user enumeration
+  const minResponseTime = 300; // ms
+
   if (record.count >= limit) {
-    return false;
+    const retryAfterMs = record.resetTime - now;
+    return { allowed: false, retryAfterMs: Math.max(retryAfterMs, minResponseTime) };
   }
 
   record.count += 1;
-  return true;
+  record.lastAttempt = now;
+  return { allowed: true };
+}
+
+function recordSuccessfulLogin(key: string): void {
+  rateLimitMap.delete(key);
 }
 
 export async function POST(req: Request) {
@@ -37,10 +47,11 @@ export async function POST(req: Request) {
     const cleanIdentifier = String(identifier).trim().toLowerCase();
 
     // Check rate limit by identifier
-    const isAllowed = checkRateLimit(`login_${cleanIdentifier}`);
-    if (!isAllowed) {
+    const rateLimitResult = checkRateLimit(`login_${cleanIdentifier}`);
+    if (!rateLimitResult.allowed) {
+      const retrySeconds = Math.ceil((rateLimitResult.retryAfterMs || 60000) / 1000);
       return NextResponse.json(
-        { error: "Too many login attempts. Please wait 1 minute before trying again." },
+        { error: `Too many login attempts. Please wait ${retrySeconds} seconds before trying again.` },
         { status: 429 }
       );
     }
@@ -58,7 +69,11 @@ export async function POST(req: Request) {
       },
     });
 
+    // Always verify password hash to prevent timing-based user enumeration
+    // Even if user not found, we run a dummy bcrypt comparison
     if (!user) {
+      // Dummy comparison to normalize response time
+      await verifyPassword(password, "$2a$10$dummyhashdummyhashdummyhashdu");
       return NextResponse.json(
         { error: "Invalid credentials. Please verify your email or phone and try again." },
         { status: 401 }
@@ -75,7 +90,7 @@ export async function POST(req: Request) {
     }
 
     // Reset rate limit on success
-    rateLimitMap.delete(`login_${cleanIdentifier}`);
+    recordSuccessfulLogin(`login_${cleanIdentifier}`);
 
     // Create session
     await createSession({
