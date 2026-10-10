@@ -153,7 +153,7 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
                   Claude-powered API access
                 </p>
                 <p className="text-[11px] text-[#6F6F6F]">
-                  WhatsApp: {siteConfig.whatsapp} • {siteConfig.email}
+                  WhatsApp: {siteConfig.whatsapp} • {siteConfig.email} • {siteConfig.emailSecondary}
                 </p>
               </div>
 
@@ -233,7 +233,7 @@ export const OrderTable: React.FC<OrderTableProps> = ({ orders }) => {
             {/* Actions */}
             <div className="flex justify-between items-center pt-4 border-t border-[#2D2D2D]">
               <div className="text-[11px] text-[#6F6F6F]">
-                Support: {siteConfig.email}
+                Support: {siteConfig.email} / {siteConfig.emailSecondary}
               </div>
               <Button
                 variant="primary"

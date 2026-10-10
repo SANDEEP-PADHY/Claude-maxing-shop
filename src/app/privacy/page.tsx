@@ -58,7 +58,7 @@ export default async function PrivacyPage() {
         <section className="space-y-3">
           <h2 className="text-base font-semibold text-[#F5F5F5]">5. Your Rights &amp; Contact</h2>
           <p>
-            You have the right to request review, correction, or deletion of your personal account data at any time by contacting us at <a href={`mailto:${siteConfig.email}`} className="text-[#D97757] hover:underline">{siteConfig.email}</a>.
+            You have the right to request review, correction, or deletion of your personal account data at any time by contacting us at <a href={`mailto:${siteConfig.email}`} className="text-[#D97757] hover:underline">{siteConfig.email}</a> or <a href={`mailto:${siteConfig.emailSecondary}`} className="text-[#D97757] hover:underline">{siteConfig.emailSecondary}</a>.
           </p>
         </section>
       </LegalPageLayout>

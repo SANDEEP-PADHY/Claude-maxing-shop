@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import React from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { siteConfig } from "@/lib/config";
@@ -70,6 +71,22 @@ export default async function TermsPage() {
           <p>
             These terms are governed by and construed in accordance with the laws of India. Any disputes arising in connection with these terms shall be subject to the exclusive jurisdiction of the competent courts in {siteConfig.address}.
           </p>
+        </section>
+        <section className="space-y-3 pt-2">
+          <h2 className="text-base font-semibold text-[#F5F5F5]">8. Contact Support</h2>
+          <p>
+            For any disputes, refund requests, or clarification on these terms, contact us at:
+          </p>
+          <div className="text-xs font-mono text-[#A3A3A3] space-y-1">
+            <div>Email: {siteConfig.email}</div>
+            <div>Email: {siteConfig.emailSecondary}</div>
+            <div>WhatsApp: {siteConfig.whatsapp}</div>
+          </div>
+          <div className="pt-2">
+            <a href="/contact">
+              <Button variant="outline" size="sm">Contact Support</Button>
+            </a>
+          </div>
         </section>
       </LegalPageLayout>
     </AppShell>

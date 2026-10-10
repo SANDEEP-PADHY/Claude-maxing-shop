@@ -4,6 +4,7 @@ export const siteConfig = {
   tagline: "Claude-powered API access",
   description: "Managed Claude-powered API access with dedicated monthly capacity allocations.",
   email: "support@claudemaxing.shop",
+  emailSecondary: "guntekgtofficial@gmail.com",
   phone: "+91 96646 50235",
   whatsapp: "+91 96646 50235",
   address: "India",

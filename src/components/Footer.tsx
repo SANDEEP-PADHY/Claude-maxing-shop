@@ -49,12 +49,22 @@ export const Footer: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Mail size={13} className="text-[#D97757]" />
-                <span>Email:</span>
+                <span>Email 1:</span>
                 <a
                   href={`mailto:${siteConfig.email}`}
                   className="text-[#F5F5F5] font-mono hover:underline"
                 >
                   {siteConfig.email}
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mail size={13} className="text-[#D97757]" />
+                <span>Email 2:</span>
+                <a
+                  href={`mailto:${siteConfig.emailSecondary}`}
+                  className="text-[#F5F5F5] font-mono hover:underline"
+                >
+                  {siteConfig.emailSecondary}
                 </a>
               </div>
             </div>
@@ -101,7 +111,7 @@ export const Footer: React.FC = () => {
             &copy; {new Date().getFullYear()} {siteConfig.name}. Claude-powered API access.
           </div>
           <div className="font-mono text-[11px]">
-            Support: {siteConfig.email} • {siteConfig.whatsapp}
+            Support: {siteConfig.email} / {siteConfig.emailSecondary} • {siteConfig.whatsapp}
           </div>
         </div>
       </div>

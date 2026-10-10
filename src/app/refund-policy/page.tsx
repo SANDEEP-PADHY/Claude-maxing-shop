@@ -84,6 +84,7 @@ export default async function RefundPolicyPage() {
           <div className="text-xs font-mono text-[#A3A3A3] space-y-1">
             <div>WhatsApp: {siteConfig.whatsapp}</div>
             <div>Email: {siteConfig.email}</div>
+            <div>Email: {siteConfig.emailSecondary}</div>
           </div>
           <div className="pt-2">
             <Link href="/contact">
